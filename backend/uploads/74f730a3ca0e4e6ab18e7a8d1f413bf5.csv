@@ -1,0 +1,47 @@
+Date,Time,Invoice_No,Product,Category,Quantity,Unit_Price,Total_Amount,Cost_Price,Customer_ID,Payment_Mode
+10/05/2026,09:14,INV-4821,Aashirvaad Atta 10kg,grains,2,₹280,₹560,232,C1042,UPI
+10/05/2026,09:14,INV-4821,amul milk 1l,dairy,3,Rs. 60,Rs. 180,52,C1042,gpay
+10/05/2026,09:14,INV-4821,toor dal 1kg,pulses,1,INR 130,INR 130,108,C1042,upi
+10/05/2026,09:31 AM,INV-4822,bread,bakery,1,$40,40/-,32,+919876543210,cash
+10/05/2026,9:31,INV-4822,  eggs (12)  ,dairy,1,90,90,74,917654321098,Cash
+May 10 2026,930,INV-4823,Lays Chips 50g,snacks,  5 pcs  ,₹20.00,100,17,C3301,PhonePe
+2026-05-10,10:15:30,INV-4824,Colgate Toothpaste 100g,personal care,2,Rs.85,170,68,C4402,Paytm
+10-05-2026,10:45,INV-4825,Surf Excel 1kg,cleaning,1,₹ 1,200,1200,960,C5503,debit card
+10.05.2026,11:00,INV-4826,Maggi Noodles 70g,snacks,6,14,84,10,C6604,CARD
+05/10/2026,11:30,INV-4827,Amul Butter 500g,Dairy,2,280,560,224,C7705,net banking
+2026/05/10,1130,INV-4828,Parle-G Biscuits 800g,biscuits,3,Rs 40,120,32,C8806,UPI
+10 05 2026,12:00,INV-4829,Coca Cola 2L,cold drink,4,₹95,380,76,C9907,scan & pay
+01-Feb-2026,12:15,inv-4830,FORTUNE SUNFLOWER OIL 1L,cooking oil,2,130,260,104,C1001,QR
+Feb 10 2026,12:30,INV4831,Dettol Soap 75g,soap,5,Rs.38,190,30,C1002,SWIPE
+10th May 2026,1245,INV-4832,Horlicks 500g,beverages,1,₹285,285,228,C1003,gpay
+,,INV-4833,,,,,,,, 
+10/05/2026,13:00,INV-4834,Aashirvaad Atta 10kg,grains,2,280,560,232,C1042,UPI
+10/05/2026,13:00,INV-4834,Aashirvaad Atta 10kg,grains,2,280,560,232,C1042,UPI
+10/05/2026,13:30,INV-4835,Tata Salt 1kg,staples,  3 kg  ,₹22,66,17,C1104,cash
+10/05/2026,14:00,INV-4836,Tropicana Orange 1L,juice,2,₹ 99,198,79,C1205,Paytm
+10/05/2026,14:15,INV-4837,Dove Shampoo 180ml,hair care,1,Rs 175,175,140,C1306,UPI
+10/05/2026,14:30,INV-4838,Vim Dishwash Bar,dishwash,4,₹25,100,20,C1407,PhonePe
+10/05/2026,15:00,INV-4839,Amul Milk 1L,milk,5,60,300,52,91 98765 43210,gpay
+10/05/2026,15:15,INV-4840,Britannia Bread,bread,2,INR.45,90,36,C1609,Cash
+10/05/2026,15:30,INV-4841,KitKat Chocolate,chocolate,10,₹20,200,16,C1710,card
+10/05/2026,15:45,INV-4842,Nescafe Coffee 50g,beverages,1,Rs. 250,250,200,C1811,UPI
+10/05/2026,16:00,INV-4843,Harpic Floor Cleaner,household,2,₹120,240,96,C1912,debit
+10/05/2026,16:15,INV-4844,Parle-G Biscuits 800g,Biscuits,  2 pcs  ,40,80,32,C2013,cash
+10/05/2026,16:30,INV-4845,Haldiram Namkeen 200g,namkeen,3,Rs.80,240,64,C2114,UPI
+10/05/2026,16:45,INV-4846,Pampers Diapers S 40,baby,1,₹799,799,639,C2215,credit card
+10/05/2026,17:00,INV-4847,Amul Ice Cream 500ml,frozen,2,₹180,360,144,C2316,Cash
+10/05/2026,17:15,INV-4848,Tata Tea Premium 250g,beverages,2,Rs 120,240,96,C2417,Gpay
+10/05/2026,17:30,INV-4849,Fortune Rice Bran Oil 1L,oils,1,₹1,50,000,150000,120000,C2518,UPI
+10/05/2026,17:45,INV-4850,,,0,₹0,0,,C2619,
+10/05/2026,18:00,INV-4851,Himalaya Face Wash,skin care,1,Rs. -150,150,120,C2720,upi
+10/05/2026,18:15,INV-4852,Cadbury Dairy Milk,chocolate,5,₹40,(200),32,C2821,Cash
+10/05/2026,18:30,INV-4853,Lifebuoy Soap 100g,soap,3,Rs.28,84,22,C2922,phonepe
+10/05/2026,18:45,INV-4854,Sunfeast Marie Biscuits,Biscuit,4,₹35,140,28,C3023,Card
+10/05/2026,19:00,INV-4855,Amul Gold Milk 1L,Dairy,6,₹62,372,50,0919876543210,BHIM
+10/05/2026,19:15,INV-4856,Lux Soap 100g,Personal Care,2,Rs 45,90,36,C3225,NIL
+10/05/2026,19:30,INV-4857,Maggi Masala 50g,masala,10,₹15,150,12,C3326,Cash
+10/05/2026,19:45,INV-4858,Pepsi 2L,soft drinks,3,₹85,255,68,C3427,UPI
+10/05/2026,20:00,INV-4859,Britannia Good Day,cookies,2,Rs.40,80,32,N/A,card
+10/05/2026,20:15,INV-4860,Colgate Max Fresh,personal care,1,₹65,65,52,-,Cash
+50/13/2026,20:30,INV-4861,Aashirvaad Atta 5kg,Grains,1,₹155,155,124,C3730,UPI
+10/05/1995,21:00,INV-4862,Old Product,grains,1,₹50,50,40,C3831,Cash
