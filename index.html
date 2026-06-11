@@ -2923,6 +2923,7 @@ function navigate(name, el) {
       if (a.getAttribute('onclick') && a.getAttribute('onclick').includes("'" + name + "'")) a.classList.add('active');
     });
   }
+  if (['login','register'].includes(name)) clearError();
   if (dashPages.includes(name)) {
     // Only reset if showing demo data — keep real data cached
     if (builtPages[name] !== 'real') delete builtPages[name];
@@ -4144,7 +4145,7 @@ function showError(msg) {
   if (!el){el=document.createElement('div');el.className='rp-err';el.style.cssText='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;';container.insertBefore(el,container.firstChild);}
   el.textContent=msg;el.style.display='block';
 }
-function clearError(){document.querySelectorAll('.rp-err').forEach(e=>e.style.display='none');}
+function clearError(){document.querySelectorAll('.rp-err').forEach(e=>e.style.display='none');} function switchToLogin(){clearError();} function switchToSignup(){clearError();}
 
 function goRegStep(n) {
   clearError();
