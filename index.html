@@ -4138,7 +4138,11 @@ async function doUpload() {
 
 function showError(msg) {
   let container = null;
-  for (let i=1;i<=4;i++){const c=document.getElementById('regStep'+i);if(c&&c.style.display!=='none'){container=c;break;}}
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    for (let i=1;i<=4;i++){const c=document.getElementById('regStep'+i);if(c&&c.style.display!=='none'){container=c;break;}}
+    if (!container) container = activePage.querySelector('.auth-card');
+  }
   if (!container) document.querySelectorAll('.auth-card').forEach(c=>{if(getComputedStyle(c).display!=='none')container=c;});
   if (!container) return;
   let el = container.querySelector('.rp-err');
