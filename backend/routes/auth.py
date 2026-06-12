@@ -2,6 +2,7 @@
 from sqlalchemy.orm import Session
 from Database.Database import get_db
 from models.schema import LoginRequest, LoginResponse
+from models.user import User
 from services.auth_services import login_user
 from pydantic import BaseModel
 from models.schema import (
