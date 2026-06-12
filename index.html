@@ -2380,6 +2380,7 @@ footer{
           <input type="checkbox" id="rememberMe" style="accent-color:var(--green)"/>
           <label for="rememberMe" style="font-size:13px;color:var(--text2);cursor:pointer">Remember me for 30 days</label>
         </div>
+        <div id="loginError" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
         <button class="btn-auth" id="loginBtn" onclick="submitLogin(this)">Log in →</button>
         <div class="auth-footer">Don't have an account? <a onclick="navigate('register')">Sign up free</a></div>
       </div>
@@ -4496,13 +4497,11 @@ async function submitLogin(btn) {
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-    if (!res.ok) { 
-     const errBox = document.getElementById('loginBtn').closest('.auth-card');
-     let el = errBox.querySelector('.rp-err');
-     if(!el){el=document.createElement('div');el.className='rp-err';el.style.cssText='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;';errBox.insertBefore(el,errBox.firstChild);}
-     el.textContent = data.detail || 'Invalid email or password.';
-     el.style.display='block';
-     return; 
+    if (!res.ok) {
+     const err = document.getElementById('loginError');
+     err.textContent = data.detail || 'Invalid email or password.';
+     err.style.display = 'block';
+     return;
     }
     authToken = data.access_token;
     localStorage.setItem('rp_token', authToken);
