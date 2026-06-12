@@ -4496,7 +4496,14 @@ async function submitLogin(btn) {
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
-    if (!res.ok) { showError(data.detail || 'Invalid email or password.'); return; }
+    if (!res.ok) { 
+     const errBox = document.getElementById('loginBtn').closest('.auth-card');
+     let el = errBox.querySelector('.rp-err');
+     if(!el){el=document.createElement('div');el.className='rp-err';el.style.cssText='background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ff6b6b;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;';errBox.insertBefore(el,errBox.firstChild);}
+     el.textContent = data.detail || 'Invalid email or password.';
+     el.style.display='block';
+     return; 
+    }
     authToken = data.access_token;
     localStorage.setItem('rp_token', authToken);
     localStorage.setItem('rp_store', data.store_name || 'My Store');
