@@ -10,7 +10,7 @@ def generate_otp(length: int = 6) -> str:
 
 def otp_expiry(minutes: int = 10) -> datetime:
     """Return a datetime that is `minutes` from now — OTP expires then."""
-    return datetime.utcnow() + timedelta(minutes=minutes)
+    return datetime.now() + timedelta(minutes=minutes)
 
 
 def mask_phone(phone: str) -> str:

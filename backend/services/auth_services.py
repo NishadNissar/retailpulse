@@ -126,7 +126,7 @@ def register_step2(db: Session, data: Step2OTPVerify) -> Step2Response:
         )
 
     # ── OTP expired? ──────────────────────────────────────────────────────────
-    if user.otp_expires_at and datetime.now(timezone.utc) > user.otp_expires_at:
+    if user.otp_expires_at and datetime.now() > user.otp_expires_at.replace(tzinfo=None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OTP has expired. Please request a new one."
