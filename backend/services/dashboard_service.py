@@ -39,11 +39,26 @@ def get_user_df(db: Session, user_id: int) -> pd.DataFrame:
 # 1. SALES DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_sales_data(db: Session, user_id: int) -> dict:
+def get_sales_data(db: Session, user_id: int, period: str = "all") -> dict:
     df = get_user_df(db, user_id)
 
     if df.empty:
         return {"status": "no_data", "message": "No sales data found. Upload a file first."}
+
+    # ── Filter by Period ──────────────────────────────────────
+    if period != "all" and "date" in df.columns and not df["date"].isna().all():
+        max_date = df["date"].max()
+        if period == "today":
+            df = df[df["date"].dt.date == max_date.date()]
+        elif period == "7days":
+            df = df[df["date"] >= (max_date - timedelta(days=6))]
+        elif period == "30days":
+            df = df[df["date"] >= (max_date - timedelta(days=29))]
+        elif period == "365days":
+            df = df[df["date"] >= (max_date - timedelta(days=364))]
+
+    if df.empty:
+        return {"status": "no_data", "message": f"No sales data found for the selected period ({period})."}
 
     # ── KPIs ──────────────────────────────────────────────────
     total_revenue    = float(df["total_amount"].sum())

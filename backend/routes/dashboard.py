@@ -45,10 +45,11 @@ def get_current_user_and_check_access(dashboard_name: str):
 
 @router.get("/sales", summary="Sales dashboard data")
 def sales_dashboard(
+    period: str = "all",
     user_id: int = Depends(get_current_user_and_check_access("sales")),
     db: Session = Depends(get_db)
 ):
-    return get_sales_data(db, user_id)
+    return get_sales_data(db, user_id, period)
 
 
 @router.get("/products", summary="Products dashboard data")
