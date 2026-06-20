@@ -32,7 +32,7 @@ def get_current_user_and_check_access(dashboard_name: str):
             raise HTTPException(status_code=401, detail="User not found")
             
         # Check trial expiry
-        if user.trial_ends_at and datetime.now(timezone.utc) > user.trial_ends_at:
+        if user.trial_ends_at and datetime.now(timezone.utc) > user.trial_ends_at.replace(tzinfo=timezone.utc):
             raise HTTPException(status_code=403, detail="TRIAL_EXPIRED")
             
         # Check plan enforcement

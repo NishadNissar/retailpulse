@@ -69,13 +69,17 @@ def get_sales_data(db: Session, user_id: int, period: str = "all") -> dict:
     avg_order_value  = round(total_revenue / total_orders, 2) if total_orders > 0 else 0
 
     # ── Revenue by date ───────────────────────────────────────
+    df["cost_row"] = df["cost_price"].fillna(0) * df["quantity"].fillna(0)
     daily = (
-        df.groupby(df["date"].dt.date)["total_amount"]
-        .sum()
+        df.groupby(df["date"].dt.date).agg(
+            revenue=("total_amount", "sum"),
+            cost=("cost_row", "sum")
+        )
         .reset_index()
-        .rename(columns={"date": "date", "total_amount": "revenue"})
         .sort_values("date")
     )
+    daily["revenue"] = daily["revenue"].round(2)
+    daily["profit"] = (daily["revenue"] - daily["cost"]).round(2)
     daily["date"] = daily["date"].astype(str)
 
     # ── Revenue by month ──────────────────────────────────────
@@ -195,6 +199,39 @@ def get_products_data(db: Session, user_id: int) -> dict:
             .to_dict()
         )
 
+    # ── Basket Combo Analysis (Co-buy rate) ───────────────────
+    combos_data = []
+    txns = df[df["invoice_number"].notna() & (df["invoice_number"] != "")]
+    if not txns.empty and "date" in df.columns and "product" in df.columns:
+        total_days = max(1, df["date"].dt.date.nunique())
+        prod_prices = df.groupby("product")["unit_price"].mean().to_dict()
+        invoice_prods = txns[["invoice_number", "product"]].drop_duplicates()
+        prod_counts = invoice_prods["product"].value_counts().to_dict()
+        
+        merged = pd.merge(invoice_prods, invoice_prods, on="invoice_number")
+        pairs = merged[merged["product_x"] != merged["product_y"]]
+        
+        if not pairs.empty:
+            pair_counts = pairs.groupby(["product_x", "product_y"]).size().reset_index(name="co_buy_count")
+            pair_counts["count_x"] = pair_counts["product_x"].map(prod_counts)
+            pair_counts["rate"] = (pair_counts["co_buy_count"] / pair_counts["count_x"] * 100).round(1)
+            pair_counts["price_y"] = pair_counts["product_y"].map(prod_prices).fillna(0)
+            pair_counts["uplift"] = (
+                ((pair_counts["count_x"] - pair_counts["co_buy_count"]) / total_days)
+                * 0.10
+                * pair_counts["price_y"]
+            ).round(0).astype(int)
+            
+            pair_counts = pair_counts.sort_values(by=["co_buy_count", "rate"], ascending=[False, False])
+            
+            for _, row in pair_counts.head(10).iterrows():
+                combos_data.append({
+                    "product_a":   str(row["product_x"]),
+                    "product_b":   str(row["product_y"]),
+                    "co_buy_rate": f"{int(round(row['rate']))}%",
+                    "uplift":      f"₹{int(row['uplift']):,}/day uplift" if row["uplift"] > 0 else "₹0/day uplift"
+                })
+
     return {
         "status":           "success",
         "top_by_revenue":   top_revenue.to_dict(orient="records"),
@@ -202,6 +239,7 @@ def get_products_data(db: Session, user_id: int) -> dict:
         "category_revenue": category_revenue,
         "category_qty":     category_qty,
         "margin_analysis":  margin_data,
+        "combos":           combos_data,
     }
 
 

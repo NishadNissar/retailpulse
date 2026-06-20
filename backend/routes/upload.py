@@ -31,7 +31,7 @@ async def upload_file(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
         
-    if user.trial_ends_at and datetime.now(timezone.utc) > user.trial_ends_at:
+    if user.trial_ends_at and datetime.now(timezone.utc) > user.trial_ends_at.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=403, detail="TRIAL_EXPIRED")
         
     max_rows = 500 if user.plan == "starter" else None
