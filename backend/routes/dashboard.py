@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from Database.Database import get_db
 from utils.jwt_handler import get_user_id_from_token
+from fastapi import APIRouter, Depends, Query
 from services.dashboard_service import (
     get_sales_data,
     get_products_data,
@@ -43,50 +44,32 @@ def get_current_user_and_check_access(dashboard_name: str):
     return _checker
 
 
-@router.get("/sales", summary="Sales dashboard data")
-def sales_dashboard(
-    period: str = "all",
-    user_id: int = Depends(get_current_user_and_check_access("sales")),
-    db: Session = Depends(get_db)
-):
+@router.get("/sales")
+def sales(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
     return get_sales_data(db, user_id, period)
 
+@router.get("/products")
+def products(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
+    return get_products_data(db, user_id, period)
 
-@router.get("/products", summary="Products dashboard data")
-def products_dashboard(
-    user_id: int = Depends(get_current_user_and_check_access("products")),
-    db: Session = Depends(get_db)
-):
-    return get_products_data(db, user_id)
+@router.get("/customers")
+def customers(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
+    return get_customers_data(db, user_id, period)
 
+@router.get("/inventory")
+def inventory(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
+    return get_inventory_data(db, user_id, period)
 
-@router.get("/customers", summary="Customers dashboard data")
-def customers_dashboard(
-    user_id: int = Depends(get_current_user_and_check_access("customers")),
-    db: Session = Depends(get_db)
-):
-    return get_customers_data(db, user_id)
+@router.get("/staff")
+def staff(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
+    return get_staff_data(db, user_id, period)
 
-
-@router.get("/inventory", summary="Inventory dashboard data")
-def inventory_dashboard(
-    user_id: int = Depends(get_current_user_and_check_access("inventory")),
-    db: Session = Depends(get_db)
-):
-    return get_inventory_data(db, user_id)
-
-
-@router.get("/staff", summary="Staff & Ops dashboard data")
-def staff_dashboard(
-    user_id: int = Depends(get_current_user_and_check_access("staff")),
-    db: Session = Depends(get_db)
-):
-    return get_staff_data(db, user_id)
-
-
-@router.get("/health", summary="Business Health dashboard data")
-def health_dashboard(
-    user_id: int = Depends(get_current_user_and_check_access("health")),
-    db: Session = Depends(get_db)
-):
-    return get_health_data(db, user_id)
+@router.get("/health")
+def health(period: str = Query("today"), credentials = Depends(security), db = Depends(get_db)):
+    user_id = get_user_id_from_token(credentials.credentials)
+    return get_health_data(db, user_id, period)

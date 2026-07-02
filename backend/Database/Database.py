@@ -4,16 +4,21 @@ from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-# ── Database URL ──────────────────────────────────────────────────────────────
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./retailpulse.db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# ── Engine ────────────────────────────────────────────────────────────────────
+if not DATABASE_URL:
+    raise ValueError(
+        "❌ DATABASE_URL not found in .env\n"
+        "Add this to your .env file:\n"
+        "DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres"
+    )
+
+# Supabase sometimes returns postgres:// — SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
         DATABASE_URL,
@@ -23,22 +28,13 @@ if DATABASE_URL.startswith("sqlite"):
 else:
     engine = create_engine(
         DATABASE_URL,
-        echo=True,          # Set False in production (stops SQL logs)
-        pool_pre_ping=True  # Checks connection health before using it
+        echo=True,
+        pool_pre_ping=True
     )
 
-# ── Session factory ───────────────────────────────────────────────────────────
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-# ── Base class for all models ─────────────────────────────────────────────────
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
-# ── Dependency: get DB session, auto-close when done ─────────────────────────
 def get_db():
     db = SessionLocal()
     try:

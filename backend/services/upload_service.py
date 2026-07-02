@@ -3,6 +3,7 @@ import numpy as np
 import os
 import re
 import json
+import math
 from datetime import datetime
 from sqlalchemy.orm import Session
 from models.user import SalesData, UploadHistory
@@ -23,6 +24,23 @@ def safe_str(val):
         pass
     s = str(val).strip()
     return None if s.lower() in ("nan", "none", "null", "") else s
+
+
+# ══════════════════════════════════════════════════════════════
+# JSON SAFETY HELPER — prevents "Out of range float values are
+# not JSON compliant: nan" errors when building the response dict
+# ══════════════════════════════════════════════════════════════
+
+def sanitize_for_json(obj):
+    """Recursively replace NaN/Infinity floats with None so json.dumps doesn't blow up."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    return obj
+
 
 # ══════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
@@ -69,7 +87,7 @@ def process_upload(file_path: str, original_name: str, user_id: int = None, db: 
             if pd.api.types.is_datetime64_any_dtype(df[col]):
                 df[col] = df[col].dt.strftime("%Y-%m-%d")
 
-        return {
+        result = {
             "status":        "success",
             "file_name":     original_name,
             "original_rows": original_rows,
@@ -81,6 +99,8 @@ def process_upload(file_path: str, original_name: str, user_id: int = None, db: 
             "upload_id":     upload_id,
             "preview":       df.head(5).to_dict(orient="records"),
         }
+
+        return sanitize_for_json(result)
 
     except Exception as e:
         return {
@@ -1178,8 +1198,24 @@ def save_to_database(
     removed_rows: int,
     cleaning_log: list
 ) -> int:
+    from datetime import date as _date
+
     try:
-        # ── Save upload history first ─────────────────────────
+        today = _date.today()
+
+        # ── STEP 1: Delete today's existing rows for this user ──
+        # This prevents accumulation when user re-uploads on the same day
+        deleted = (
+            db.query(SalesData)
+            .filter(SalesData.user_id == user_id)
+            .filter(SalesData.upload_date == today)
+            .delete(synchronize_session=False)
+        )
+        if deleted > 0:
+            print(f"🗑️  Deleted {deleted} existing rows for user {user_id} dated {today} (re-upload)")
+            cleaning_log.append(f"♻️ Replaced {deleted} previously uploaded rows from today")
+
+        # ── STEP 2: Save upload history ──
         upload = UploadHistory(
             user_id       = user_id,
             file_name     = file_name,
@@ -1192,7 +1228,7 @@ def save_to_database(
         db.add(upload)
         db.flush()
 
-        # ── Save each row to sales_data ───────────────────────
+        # ── STEP 3: Save each row to sales_data ──
         rows_to_insert = []
         for _, row in df.iterrows():
             def get_float(col):
@@ -1223,6 +1259,7 @@ def save_to_database(
             sales_row = SalesData(
                 user_id        = user_id,
                 upload_id      = upload.id,
+                upload_date    = today,                         # ← NEW: stamps when uploaded
                 date           = get_date("date"),
                 time           = get_str("time"),
                 invoice_number = get_str("invoice_number"),
@@ -1242,7 +1279,7 @@ def save_to_database(
 
         db.bulk_save_objects(rows_to_insert)
         db.commit()
-        print(f"✅ Saved {len(rows_to_insert)} rows to Supabase for user {user_id}")
+        print(f"✅ Saved {len(rows_to_insert)} rows to Supabase for user {user_id} (upload_date={today})")
         return upload.id
 
     except Exception as e:

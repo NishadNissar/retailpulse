@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract, case
 from models.user import SalesData
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as _date
 import pandas as pd
 
 
@@ -14,6 +13,7 @@ def get_user_df(db: Session, user_id: int) -> pd.DataFrame:
     data = []
     for r in rows:
         data.append({
+            "upload_date":    r.upload_date,
             "date":           r.date,
             "time":           r.time,
             "invoice_number": r.invoice_number,
@@ -27,40 +27,72 @@ def get_user_df(db: Session, user_id: int) -> pd.DataFrame:
             "payment_mode":   r.payment_mode,
             "stock_qty":      r.stock_qty,
             "expense_amount": r.expense_amount,
-            "cost_amount":    r.cost_amount,
         })
     df = pd.DataFrame(data)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    if "upload_date" in df.columns:
+        df["upload_date"] = pd.to_datetime(df["upload_date"], errors="coerce")
     return df
+
+
+# ══════════════════════════════════════════════════════════════
+# PERIOD FILTER — used by ALL dashboards
+# ══════════════════════════════════════════════════════════════
+
+def _filter_by_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
+    """
+    Filter dataframe by period.
+      today    → rows where upload_date == today (latest upload session)
+      7days    → last 7 days of sale dates
+      30days   → last 30 days of sale dates
+      365days  → last 365 days of sale dates
+      all      → no filter
+    """
+    if df.empty or period == "all":
+        return df
+
+    today = pd.Timestamp(_date.today())
+
+    if period == "today":
+        if "upload_date" not in df.columns or df["upload_date"].isna().all():
+            return df.iloc[0:0]  # empty
+        return df[df["upload_date"].dt.date == today.date()]
+
+    if "date" not in df.columns or df["date"].isna().all():
+        return df
+
+    if period == "7days":
+        return df[df["date"] >= (today - timedelta(days=6))]
+    if period == "30days":
+        return df[df["date"] >= (today - timedelta(days=29))]
+    if period == "365days":
+        return df[df["date"] >= (today - timedelta(days=364))]
+
+    return df
+
+
+def _no_data_response(period: str, msg: str = None) -> dict:
+    if msg:
+        return {"status": "no_data", "message": msg}
+    if period == "today":
+        return {"status": "no_data", "message": "No data for today — upload your file to see today's dashboard."}
+    return {"status": "no_data", "message": f"No data found for the selected period ({period})."}
 
 
 # ══════════════════════════════════════════════════════════════
 # 1. SALES DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_sales_data(db: Session, user_id: int, period: str = "all") -> dict:
+def get_sales_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No sales data found. Upload a file first."}
+        return _no_data_response(period, "No sales data found. Upload a file first.")
 
-    # ── Filter by Period ──────────────────────────────────────
-    if period != "all" and "date" in df.columns and not df["date"].isna().all():
-        max_date = df["date"].max()
-        if period == "today":
-            df = df[df["date"].dt.date == max_date.date()]
-        elif period == "7days":
-            df = df[df["date"] >= (max_date - timedelta(days=6))]
-        elif period == "30days":
-            df = df[df["date"] >= (max_date - timedelta(days=29))]
-        elif period == "365days":
-            df = df[df["date"] >= (max_date - timedelta(days=364))]
-
+    df = _filter_by_period(df, period)
     if df.empty:
-        return {"status": "no_data", "message": f"No sales data found for the selected period ({period})."}
+        return _no_data_response(period)
 
-    # ── KPIs ──────────────────────────────────────────────────
     total_revenue    = float(df["total_amount"].sum())
     total_cost       = float(df["cost_price"].fillna(0).multiply(df["quantity"].fillna(0)).sum())
     total_profit     = total_revenue - total_cost
@@ -68,53 +100,37 @@ def get_sales_data(db: Session, user_id: int, period: str = "all") -> dict:
     total_orders     = df["invoice_number"].nunique() if "invoice_number" in df.columns else len(df)
     avg_order_value  = round(total_revenue / total_orders, 2) if total_orders > 0 else 0
 
-    # ── Revenue by date ───────────────────────────────────────
     df["cost_row"] = df["cost_price"].fillna(0) * df["quantity"].fillna(0)
     daily = (
         df.groupby(df["date"].dt.date).agg(
             revenue=("total_amount", "sum"),
             cost=("cost_row", "sum")
-        )
-        .reset_index()
-        .sort_values("date")
+        ).reset_index().sort_values("date")
     )
     daily["revenue"] = daily["revenue"].round(2)
-    daily["profit"] = (daily["revenue"] - daily["cost"]).round(2)
-    daily["date"] = daily["date"].astype(str)
+    daily["profit"]  = (daily["revenue"] - daily["cost"]).round(2)
+    daily["date"]    = daily["date"].astype(str)
 
-    # ── Revenue by month ──────────────────────────────────────
     df["month"] = df["date"].dt.to_period("M").astype(str)
     monthly = (
-        df.groupby("month")["total_amount"]
-        .sum()
-        .reset_index()
-        .rename(columns={"total_amount": "revenue"})
-        .sort_values("month")
+        df.groupby("month")["total_amount"].sum().reset_index()
+        .rename(columns={"total_amount": "revenue"}).sort_values("month")
     )
 
-    # ── Payment mode split ────────────────────────────────────
     payment_split = {}
     if "payment_mode" in df.columns:
-        payment_split = (
-            df.groupby("payment_mode")["total_amount"]
-            .sum()
-            .round(2)
-            .to_dict()
-        )
+        payment_split = df.groupby("payment_mode")["total_amount"].sum().round(2).to_dict()
 
-    # ── Revenue by day of week ────────────────────────────────
     df["day_of_week"] = df["date"].dt.day_name()
     day_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
     dow = (
-        df.groupby("day_of_week")["total_amount"]
-        .sum()
-        .reindex(day_order, fill_value=0)
-        .round(2)
-        .to_dict()
+        df.groupby("day_of_week")["total_amount"].sum()
+        .reindex(day_order, fill_value=0).round(2).to_dict()
     )
 
     return {
         "status": "success",
+        "period": period,
         "kpis": {
             "total_revenue":   round(total_revenue, 2),
             "total_profit":    round(total_profit, 2),
@@ -133,48 +149,33 @@ def get_sales_data(db: Session, user_id: int, period: str = "all") -> dict:
 # 2. PRODUCTS DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_products_data(db: Session, user_id: int) -> dict:
+def get_products_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No data found. Upload a file first."}
+        return _no_data_response(period, "No data found. Upload a file first.")
 
-    if "product" not in df.columns:
-        return {"status": "no_data", "message": "No product column found in your data."}
+    df = _filter_by_period(df, period)
+    if df.empty or "product" not in df.columns:
+        return _no_data_response(period)
 
-    # ── Top 10 products by revenue ────────────────────────────
     top_revenue = (
-        df.groupby("product")["total_amount"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(10)
-        .round(2)
-        .reset_index()
-        .rename(columns={"total_amount": "revenue"})
+        df.groupby("product")["total_amount"].sum()
+        .sort_values(ascending=False).head(10).round(2)
+        .reset_index().rename(columns={"total_amount": "revenue"})
     )
 
-    # ── Top 10 products by quantity ───────────────────────────
     top_quantity = (
-        df.groupby("product")["quantity"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(10)
-        .round(2)
-        .reset_index()
+        df.groupby("product")["quantity"].sum()
+        .sort_values(ascending=False).head(10).round(2).reset_index()
     )
 
-    # ── Revenue by category ───────────────────────────────────
     category_revenue = {}
     if "category" in df.columns:
         category_revenue = (
-            df.groupby("category")["total_amount"]
-            .sum()
-            .round(2)
-            .sort_values(ascending=False)
-            .to_dict()
+            df.groupby("category")["total_amount"].sum().round(2)
+            .sort_values(ascending=False).to_dict()
         )
 
-    # ── Profit margin per product ─────────────────────────────
     margin_data = []
     if "cost_price" in df.columns:
         prod_df = df.groupby("product").agg(
@@ -182,49 +183,36 @@ def get_products_data(db: Session, user_id: int) -> dict:
             cost=("cost_price", "mean"),
             qty=("quantity", "sum")
         ).reset_index()
-        prod_df["total_cost"]  = prod_df["cost"] * prod_df["qty"]
-        prod_df["profit"]      = prod_df["revenue"] - prod_df["total_cost"]
-        prod_df["margin_pct"]  = (prod_df["profit"] / prod_df["revenue"] * 100).round(2)
+        prod_df["total_cost"] = prod_df["cost"] * prod_df["qty"]
+        prod_df["profit"]     = prod_df["revenue"] - prod_df["total_cost"]
+        prod_df["margin_pct"] = (prod_df["profit"] / prod_df["revenue"] * 100).round(2)
         prod_df = prod_df.sort_values("margin_pct", ascending=False).head(10)
-        margin_data = prod_df[["product", "revenue", "profit", "margin_pct"]].round(2).to_dict(orient="records")
+        margin_data = prod_df[["product","revenue","profit","margin_pct"]].round(2).to_dict(orient="records")
 
-    # ── Category quantity ─────────────────────────────────────
     category_qty = {}
     if "category" in df.columns:
         category_qty = (
-            df.groupby("category")["quantity"]
-            .sum()
-            .round(2)
-            .sort_values(ascending=False)
-            .to_dict()
+            df.groupby("category")["quantity"].sum().round(2)
+            .sort_values(ascending=False).to_dict()
         )
 
-    # ── Basket Combo Analysis (Co-buy rate) ───────────────────
     combos_data = []
     txns = df[df["invoice_number"].notna() & (df["invoice_number"] != "")]
     if not txns.empty and "date" in df.columns and "product" in df.columns:
         total_days = max(1, df["date"].dt.date.nunique())
         prod_prices = df.groupby("product")["unit_price"].mean().to_dict()
-        invoice_prods = txns[["invoice_number", "product"]].drop_duplicates()
+        invoice_prods = txns[["invoice_number","product"]].drop_duplicates()
         prod_counts = invoice_prods["product"].value_counts().to_dict()
-        
         merged = pd.merge(invoice_prods, invoice_prods, on="invoice_number")
         pairs = merged[merged["product_x"] != merged["product_y"]]
-        
         if not pairs.empty:
-            pair_counts = pairs.groupby(["product_x", "product_y"]).size().reset_index(name="co_buy_count")
-            pair_counts["count_x"] = pair_counts["product_x"].map(prod_counts)
-            pair_counts["rate"] = (pair_counts["co_buy_count"] / pair_counts["count_x"] * 100).round(1)
-            pair_counts["price_y"] = pair_counts["product_y"].map(prod_prices).fillna(0)
-            pair_counts["uplift"] = (
-                ((pair_counts["count_x"] - pair_counts["co_buy_count"]) / total_days)
-                * 0.10
-                * pair_counts["price_y"]
-            ).round(0).astype(int)
-            
-            pair_counts = pair_counts.sort_values(by=["co_buy_count", "rate"], ascending=[False, False])
-            
-            for _, row in pair_counts.head(10).iterrows():
+            pc = pairs.groupby(["product_x","product_y"]).size().reset_index(name="co_buy_count")
+            pc["count_x"] = pc["product_x"].map(prod_counts)
+            pc["rate"]    = (pc["co_buy_count"] / pc["count_x"] * 100).round(1)
+            pc["price_y"] = pc["product_y"].map(prod_prices).fillna(0)
+            pc["uplift"]  = (((pc["count_x"] - pc["co_buy_count"]) / total_days) * 0.10 * pc["price_y"]).round(0).astype(int)
+            pc = pc.sort_values(by=["co_buy_count","rate"], ascending=[False, False])
+            for _, row in pc.head(10).iterrows():
                 combos_data.append({
                     "product_a":   str(row["product_x"]),
                     "product_b":   str(row["product_y"]),
@@ -234,6 +222,7 @@ def get_products_data(db: Session, user_id: int) -> dict:
 
     return {
         "status":           "success",
+        "period":           period,
         "top_by_revenue":   top_revenue.to_dict(orient="records"),
         "top_by_quantity":  top_quantity.to_dict(orient="records"),
         "category_revenue": category_revenue,
@@ -247,69 +236,55 @@ def get_products_data(db: Session, user_id: int) -> dict:
 # 3. CUSTOMERS DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_customers_data(db: Session, user_id: int) -> dict:
+def get_customers_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No data found. Upload a file first."}
+        return _no_data_response(period, "No data found. Upload a file first.")
 
-    if "customer_id" not in df.columns:
-        return {"status": "no_data", "message": "No customer_id column found."}
+    df = _filter_by_period(df, period)
+    if df.empty or "customer_id" not in df.columns:
+        return _no_data_response(period)
 
     df = df[df["customer_id"].notna()]
+    if df.empty:
+        return _no_data_response(period)
 
-    # ── Total unique customers ────────────────────────────────
     total_customers = df["customer_id"].nunique()
 
-    # ── Top customers by spend ────────────────────────────────
     top_customers = (
-        df.groupby("customer_id")["total_amount"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(10)
-        .round(2)
-        .reset_index()
-        .rename(columns={"total_amount": "total_spend"})
+        df.groupby("customer_id")["total_amount"].sum()
+        .sort_values(ascending=False).head(10).round(2)
+        .reset_index().rename(columns={"total_amount":"total_spend"})
     )
 
-    # ── Visit frequency ───────────────────────────────────────
     visit_freq = (
-        df.groupby("customer_id")["date"]
-        .nunique()
-        .value_counts()
-        .sort_index()
-        .reset_index()
-        .rename(columns={"date": "visits", "count": "customers"})
+        df.groupby("customer_id")["date"].nunique()
+        .value_counts().sort_index().reset_index()
+        .rename(columns={"date":"visits","count":"customers"})
     )
 
-    # ── Average basket size ───────────────────────────────────
     basket = df.groupby("invoice_number")["total_amount"].sum() if "invoice_number" in df.columns else df.groupby("customer_id")["total_amount"].mean()
-    avg_basket = round(float(basket.mean()), 2)
+    avg_basket = round(float(basket.mean()), 2) if not basket.empty else 0
 
-    # ── New vs returning ──────────────────────────────────────
     cust_visits = df.groupby("customer_id")["date"].nunique()
-    new_customers      = int((cust_visits == 1).sum())
+    new_customers       = int((cust_visits == 1).sum())
     returning_customers = int((cust_visits > 1).sum())
 
-    # ── Revenue by customer segment ───────────────────────────
     cust_spend = df.groupby("customer_id")["total_amount"].sum()
-    high_value  = int((cust_spend > cust_spend.quantile(0.75)).sum())
-    mid_value   = int(((cust_spend >= cust_spend.quantile(0.25)) & (cust_spend <= cust_spend.quantile(0.75))).sum())
-    low_value   = int((cust_spend < cust_spend.quantile(0.25)).sum())
+    high_value = int((cust_spend > cust_spend.quantile(0.75)).sum()) if len(cust_spend) > 0 else 0
+    mid_value  = int(((cust_spend >= cust_spend.quantile(0.25)) & (cust_spend <= cust_spend.quantile(0.75))).sum()) if len(cust_spend) > 0 else 0
+    low_value  = int((cust_spend < cust_spend.quantile(0.25)).sum()) if len(cust_spend) > 0 else 0
 
     return {
         "status":              "success",
+        "period":              period,
         "total_customers":     total_customers,
         "avg_basket_size":     avg_basket,
         "new_customers":       new_customers,
         "returning_customers": returning_customers,
         "top_customers":       top_customers.to_dict(orient="records"),
         "visit_frequency":     visit_freq.to_dict(orient="records"),
-        "segments": {
-            "high_value": high_value,
-            "mid_value":  mid_value,
-            "low_value":  low_value,
-        }
+        "segments": {"high_value": high_value, "mid_value": mid_value, "low_value": low_value}
     }
 
 
@@ -317,68 +292,54 @@ def get_customers_data(db: Session, user_id: int) -> dict:
 # 4. INVENTORY DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_inventory_data(db: Session, user_id: int) -> dict:
+def get_inventory_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No data found. Upload a file first."}
+        return _no_data_response(period, "No data found. Upload a file first.")
 
-    # ── Most sold products (need restock) ─────────────────────
+    df = _filter_by_period(df, period)
+    if df.empty:
+        return _no_data_response(period)
+
     top_sold = (
-        df.groupby("product")["quantity"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(10)
-        .round(2)
-        .reset_index()
-        .rename(columns={"quantity": "units_sold"})
+        df.groupby("product")["quantity"].sum()
+        .sort_values(ascending=False).head(10).round(2)
+        .reset_index().rename(columns={"quantity":"units_sold"})
     )
 
-    # ── Category stock movement ───────────────────────────────
     category_movement = {}
     if "category" in df.columns:
         category_movement = (
-            df.groupby("category")["quantity"]
-            .sum()
-            .round(2)
-            .sort_values(ascending=False)
-            .to_dict()
+            df.groupby("category")["quantity"].sum().round(2)
+            .sort_values(ascending=False).to_dict()
         )
 
-    # ── Products with low sales (slow moving) ─────────────────
     slow_moving = (
-        df.groupby("product")["quantity"]
-        .sum()
-        .sort_values(ascending=True)
-        .head(10)
-        .round(2)
-        .reset_index()
-        .rename(columns={"quantity": "units_sold"})
+        df.groupby("product")["quantity"].sum()
+        .sort_values(ascending=True).head(10).round(2)
+        .reset_index().rename(columns={"quantity":"units_sold"})
     )
 
-    # ── Daily quantity sold trend ─────────────────────────────
     daily_qty = (
-        df.groupby(df["date"].dt.date)["quantity"]
-        .sum()
-        .reset_index()
-        .rename(columns={"date": "date", "quantity": "units_sold"})
+        df.groupby(df["date"].dt.date)["quantity"].sum()
+        .reset_index().rename(columns={"date":"date","quantity":"units_sold"})
         .sort_values("date")
     )
     daily_qty["date"] = daily_qty["date"].astype(str)
 
-    # ── Capital locked (cost * qty) ───────────────────────────
     capital_locked = 0
     if "cost_price" in df.columns:
         df["capital"] = df["cost_price"].fillna(0) * df["quantity"].fillna(0)
         capital_locked = round(float(df["capital"].sum()), 2)
 
     return {
-        "status":             "success",
-        "top_selling":        top_sold.to_dict(orient="records"),
-        "slow_moving":        slow_moving.to_dict(orient="records"),
-        "category_movement":  category_movement,
-        "daily_qty_trend":    daily_qty.to_dict(orient="records"),
-        "capital_locked":     capital_locked,
+        "status":            "success",
+        "period":            period,
+        "top_selling":       top_sold.to_dict(orient="records"),
+        "slow_moving":       slow_moving.to_dict(orient="records"),
+        "category_movement": category_movement,
+        "daily_qty_trend":   daily_qty.to_dict(orient="records"),
+        "capital_locked":    capital_locked,
     }
 
 
@@ -386,62 +347,52 @@ def get_inventory_data(db: Session, user_id: int) -> dict:
 # 5. STAFF & OPS DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_staff_data(db: Session, user_id: int) -> dict:
+def get_staff_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No data found. Upload a file first."}
+        return _no_data_response(period, "No data found. Upload a file first.")
 
-    if "time" not in df.columns:
-        return {"status": "no_data", "message": "No time column found. Add Time to your Excel."}
+    df = _filter_by_period(df, period)
+    if df.empty or "time" not in df.columns:
+        return _no_data_response(period, "No time column found. Add Time to your Excel.")
 
     df = df[df["time"].notna()]
+    if df.empty:
+        return _no_data_response(period)
 
-    # ── Extract hour ──────────────────────────────────────────
     def extract_hour(t):
-        try:
-            return int(str(t).split(":")[0])
-        except Exception:
-            return None
+        try:    return int(str(t).split(":")[0])
+        except: return None
 
     df["hour"] = df["time"].apply(extract_hour)
     df = df[df["hour"].notna()]
+    if df.empty:
+        return _no_data_response(period)
 
-    # ── Transactions per hour ─────────────────────────────────
     txn_per_hour = (
-        df.groupby("hour")["invoice_number"]
-        .nunique()
-        .reindex(range(6, 23), fill_value=0)
-        .reset_index()
-        .rename(columns={"invoice_number": "transactions"})
+        df.groupby("hour")["invoice_number"].nunique()
+        .reindex(range(6,23), fill_value=0).reset_index()
+        .rename(columns={"invoice_number":"transactions"})
     ) if "invoice_number" in df.columns else pd.DataFrame()
 
-    # ── Revenue per hour ──────────────────────────────────────
     rev_per_hour = (
-        df.groupby("hour")["total_amount"]
-        .sum()
-        .reindex(range(6, 23), fill_value=0)
-        .round(2)
-        .reset_index()
-        .rename(columns={"total_amount": "revenue"})
+        df.groupby("hour")["total_amount"].sum()
+        .reindex(range(6,23), fill_value=0).round(2).reset_index()
+        .rename(columns={"total_amount":"revenue"})
     )
 
-    # ── Peak hours ────────────────────────────────────────────
     peak = rev_per_hour.sort_values("revenue", ascending=False).head(3)
     peak_hours = peak["hour"].tolist()
 
-    # ── Day × Hour heatmap ────────────────────────────────────
     df["day_of_week"] = df["date"].dt.day_name()
     heatmap = (
-        df.groupby(["day_of_week", "hour"])["total_amount"]
-        .sum()
-        .round(2)
-        .reset_index()
-        .rename(columns={"total_amount": "revenue"})
+        df.groupby(["day_of_week","hour"])["total_amount"].sum().round(2)
+        .reset_index().rename(columns={"total_amount":"revenue"})
     )
 
     return {
         "status":           "success",
+        "period":           period,
         "txn_per_hour":     txn_per_hour.to_dict(orient="records") if not txn_per_hour.empty else [],
         "revenue_per_hour": rev_per_hour.to_dict(orient="records"),
         "peak_hours":       peak_hours,
@@ -453,69 +404,50 @@ def get_staff_data(db: Session, user_id: int) -> dict:
 # 6. BUSINESS HEALTH DASHBOARD
 # ══════════════════════════════════════════════════════════════
 
-def get_health_data(db: Session, user_id: int) -> dict:
+def get_health_data(db: Session, user_id: int, period: str = "today") -> dict:
     df = get_user_df(db, user_id)
-
     if df.empty:
-        return {"status": "no_data", "message": "No data found. Upload a file first."}
+        return _no_data_response(period, "No data found. Upload a file first.")
 
-    # ── Monthly revenue trend ─────────────────────────────────
+    df = _filter_by_period(df, period)
+    if df.empty:
+        return _no_data_response(period)
+
     df["month"] = df["date"].dt.to_period("M").astype(str)
     monthly = (
-        df.groupby("month")["total_amount"]
-        .sum()
-        .round(2)
-        .reset_index()
-        .rename(columns={"total_amount": "revenue"})
-        .sort_values("month")
+        df.groupby("month")["total_amount"].sum().round(2).reset_index()
+        .rename(columns={"total_amount":"revenue"}).sort_values("month")
     )
-
-    # ── Month over month growth ───────────────────────────────
     monthly["prev_revenue"] = monthly["revenue"].shift(1)
-    monthly["growth_pct"] = (
-        (monthly["revenue"] - monthly["prev_revenue"])
-        / monthly["prev_revenue"] * 100
-    ).round(2)
+    monthly["growth_pct"] = ((monthly["revenue"] - monthly["prev_revenue"]) / monthly["prev_revenue"] * 100).round(2)
     monthly = monthly.drop(columns=["prev_revenue"])
     monthly["growth_pct"] = monthly["growth_pct"].fillna(0)
 
-    # ── Revenue vs Cost waterfall ─────────────────────────────
     total_revenue = round(float(df["total_amount"].sum()), 2)
-    total_cost    = 0
+    total_cost = 0
     if "cost_price" in df.columns:
-        total_cost = round(
-            float(df["cost_price"].fillna(0).multiply(df["quantity"].fillna(0)).sum()), 2
-        )
-    gross_profit  = round(total_revenue - total_cost, 2)
+        total_cost = round(float(df["cost_price"].fillna(0).multiply(df["quantity"].fillna(0)).sum()), 2)
+    gross_profit = round(total_revenue - total_cost, 2)
 
-    # ── Best and worst months ─────────────────────────────────
     best_month  = monthly.loc[monthly["revenue"].idxmax()].to_dict() if not monthly.empty else {}
     worst_month = monthly.loc[monthly["revenue"].idxmin()].to_dict() if not monthly.empty else {}
 
-    # ── Category health ───────────────────────────────────────
     category_health = {}
     if "category" in df.columns:
         category_health = (
-            df.groupby("category")["total_amount"]
-            .sum()
-            .round(2)
-            .sort_values(ascending=False)
-            .to_dict()
+            df.groupby("category")["total_amount"].sum().round(2)
+            .sort_values(ascending=False).to_dict()
         )
 
-    # ── Overall health score (simple) ─────────────────────────
     profit_margin = round((gross_profit / total_revenue * 100), 2) if total_revenue > 0 else 0
-    if profit_margin > 30:
-        health_score = "Excellent 🟢"
-    elif profit_margin > 20:
-        health_score = "Good 🟡"
-    elif profit_margin > 10:
-        health_score = "Average 🟠"
-    else:
-        health_score = "Needs Attention 🔴"
+    if   profit_margin > 30: health_score = "Excellent 🟢"
+    elif profit_margin > 20: health_score = "Good 🟡"
+    elif profit_margin > 10: health_score = "Average 🟠"
+    else:                    health_score = "Needs Attention 🔴"
 
     return {
         "status":          "success",
+        "period":          period,
         "monthly_trend":   monthly.to_dict(orient="records"),
         "waterfall": {
             "total_revenue": total_revenue,

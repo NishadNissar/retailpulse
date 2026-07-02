@@ -1,5 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Date
 from sqlalchemy.sql import func
+from sqlalchemy import Column, Date
+from datetime import date as _date
 from Database.Database import Base
 import enum
 
@@ -130,6 +132,7 @@ class SalesData(Base):
 
     # Metadata
     upload_id      = Column(Integer, nullable=True)
+    upload_date = Column(Date,nullable=False,server_default=func.current_date(),index=True)
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
 
