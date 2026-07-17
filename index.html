@@ -4478,7 +4478,7 @@ async function submitStep1(btn) {
       body: JSON.stringify({ first_name: firstName, last_name: lastName, email, phone, password })
     });
     const data = await res.json();
-    if (!res.ok) { showError(data.detail || 'Registration failed.'); return; }
+    if (!res.ok) { showError(typeof data.detail === 'string' ? data.detail : Array.isArray(data.detail) ? data.detail[0]?.msg || 'Registration failed.' : 'Registration failed.'); return; }
     currentUserId = data.user_id;
     localStorage.setItem('rp_first_name', firstName);
     document.getElementById('otpSentTo') && (document.getElementById('otpSentTo').textContent = data.otp_sent_to);
