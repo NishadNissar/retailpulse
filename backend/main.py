@@ -57,5 +57,5 @@ def health_check():
 # ── Frontend ──────────────────────────────────────────────────────────────────
 @app.get("/app")
 def serve_frontend():
-    file_path = r"C:\Users\User\Downloads\analysis project\index.html"
+    file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html")
     return FileResponse(file_path)
