@@ -10,7 +10,6 @@ from routes.dashboard import router as dashboard_router
 import os
 
 # ── Create all tables on startup ──────────────────────────────────────────────
-Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 # ── App ───────────────────────────────────────────────────────────────────────
