@@ -7,10 +7,23 @@ from routes.auth import router as auth_router
 from routes.auth import login_router
 from routes.upload import router as upload_router
 from routes.dashboard import router as dashboard_router
-import os
+import os, sys, io
+
+# ── Force UTF-8 encoding for stdout/stderr on Windows ──────────────────────
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # ── Create all tables on startup ──────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
+
+from sqlalchemy import text
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE sales_data ADD COLUMN upload_date DATE"))
+except Exception:
+    pass
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -24,11 +37,7 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:5500",
-        "https://nishadnissar.github.io",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

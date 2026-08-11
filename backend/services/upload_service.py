@@ -1212,8 +1212,8 @@ def save_to_database(
             .delete(synchronize_session=False)
         )
         if deleted > 0:
-            print(f"🗑️  Deleted {deleted} existing rows for user {user_id} dated {today} (re-upload)")
-            cleaning_log.append(f"♻️ Replaced {deleted} previously uploaded rows from today")
+            print(f"[DELETE] Deleted {deleted} existing rows for user {user_id} dated {today} (re-upload)")
+            cleaning_log.append(f"Replaced {deleted} previously uploaded rows from today")
 
         # ── STEP 2: Save upload history ──
         upload = UploadHistory(
@@ -1279,10 +1279,10 @@ def save_to_database(
 
         db.bulk_save_objects(rows_to_insert)
         db.commit()
-        print(f"✅ Saved {len(rows_to_insert)} rows to Supabase for user {user_id} (upload_date={today})")
+        print(f"[SUCCESS] Saved {len(rows_to_insert)} rows to Supabase for user {user_id} (upload_date={today})")
         return upload.id
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Database save error: {e}")
+        print(f"[ERROR] Database save error: {e}")
         return None

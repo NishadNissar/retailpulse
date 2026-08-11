@@ -41,7 +41,7 @@ def send_otp_sms(phone: str, otp: str) -> bool:
         return response.status_code == 200
     """
     print(f"\n{'='*40}")
-    print(f"📱 OTP for {phone}: {otp}")
+    print(f"OTP for {phone}: {otp}")
     print(f"   Expires in 10 minutes")
     print(f"{'='*40}\n")
     return True
